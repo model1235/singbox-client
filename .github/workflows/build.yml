@@ -1,29 +1,25 @@
-name: Build & Upload to OSS
+name: Build & Release
 
 on:
   push:
     tags:
-      - 'v*'  # 推送 v1.0.0 这样的 tag 时触发
-  workflow_dispatch:   # 支持手动触发
+      - 'v*'
+  workflow_dispatch:
 
 env:
-  SINGBOX_VERSION: "1.11.4"  # sing-box 版本，按需更新
+  SINGBOX_VERSION: "1.11.4"
 
 jobs:
   build:
     strategy:
       matrix:
         include:
-          - os: macos-14            # macOS ARM runner
+          - os: macos-14
             platform: macos-arm64
             singbox_url: https://github.com/SagerNet/sing-box/releases/download/v1.11.4/sing-box-1.11.4-darwin-arm64.tar.gz
-            singbox_bin: sing-box
-            artifact: "SingBox Client.app"
-          - os: windows-latest      # Windows x64 runner
+          - os: windows-latest
             platform: windows-x64
             singbox_url: https://github.com/SagerNet/sing-box/releases/download/v1.11.4/sing-box-1.11.4-windows-amd64.zip
-            singbox_bin: sing-box.exe
-            artifact: "SingBox Client.exe"
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -35,8 +31,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        run: |
-          pip install PySide6 requests pyinstaller
+        run: pip install PySide6 requests pyinstaller
 
       - name: Download sing-box (macOS)
         if: runner.os == 'macOS'
@@ -62,10 +57,7 @@ jobs:
       - name: Create DMG (macOS)
         if: runner.os == 'macOS'
         run: |
-          # 安装 create-dmg
           brew install create-dmg
-
-          # 创建 DMG
           create-dmg \
             --volname "SingBox Client" \
             --volicon "resources/icon.icns" \
@@ -78,7 +70,6 @@ jobs:
             "SingBox-Client-${{ matrix.platform }}.dmg" \
             "dist/SingBox Client.app" \
           || \
-          # 如果没有 icon.icns，不带 --volicon 重试
           create-dmg \
             --volname "SingBox Client" \
             --window-pos 200 120 \
@@ -104,72 +95,42 @@ jobs:
             SingBox-Client-${{ matrix.platform }}.dmg
             SingBox-Client-${{ matrix.platform }}.zip
 
-  upload-oss:
+  release:
     needs: build
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Install ossutil
-        run: |
-          curl -L https://gosspublic.alicdn.com/ossutil/v2/2.0.3/ossutil-2.0.3-linux-amd64.zip -o ossutil.zip
-          unzip ossutil.zip
-          chmod +x ossutil-2.0.3-linux-amd64/ossutil
-          sudo mv ossutil-2.0.3-linux-amd64/ossutil /usr/local/bin/ossutil
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: SingBox Client ${{ github.ref_name }}
+          body: |
+            ## SingBox Client ${{ github.ref_name }}
 
-      - name: Get version
-        id: version
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "ver=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          else
-            echo "ver=latest" >> $GITHUB_OUTPUT
-          fi
+            ### 下载
+            - **macOS (Apple Silicon)**: `SingBox-Client-macos-arm64.dmg`
+            - **Windows (x64)**: `SingBox-Client-windows-x64.zip`
 
-      - name: Upload to OSS
-        env:
-          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-        run: |
-          VER=${{ steps.version.outputs.ver }}
+            ### macOS 安装说明
+            1. 打开 DMG，将 SingBox Client 拖到 Applications
+            2. 首次打开前执行：`xattr -cr /Applications/SingBox\ Client.app`
+            3. 双击打开
 
-          # 上传各平台包（.dmg 和 .zip）
-          for dir in artifacts/*/; do
-            for file in "$dir"*; do
-              [ -f "$file" ] || continue
-              filename=$(basename "$file")
-              echo "上传: $filename -> oss://${{ secrets.OSS_BUCKET }}/singbox-client/${VER}/${filename}"
-              ossutil cp "$file" "oss://${{ secrets.OSS_BUCKET }}/singbox-client/${VER}/${filename}" \
-                --access-key-id="${OSS_ACCESS_KEY_ID}" \
-                --access-key-secret="${OSS_ACCESS_KEY_SECRET}" \
-                --endpoint="${{ secrets.OSS_ENDPOINT }}" \
-                --force
-            done
-          done
+            ### Windows 安装说明
+            1. 解压 zip
+            2. 运行 `SingBox Client.exe`
 
-          # 同时更新 latest 目录
-          if [ "$VER" != "latest" ]; then
-            for dir in artifacts/*/; do
-              for file in "$dir"*; do
-                [ -f "$file" ] || continue
-                filename=$(basename "$file")
-                ossutil cp "$file" "oss://${{ secrets.OSS_BUCKET }}/singbox-client/latest/${filename}" \
-                  --access-key-id="${OSS_ACCESS_KEY_ID}" \
-                  --access-key-secret="${OSS_ACCESS_KEY_SECRET}" \
-                  --endpoint="${{ secrets.OSS_ENDPOINT }}" \
-                  --force
-              done
-            done
-          fi
-
-      - name: Summary
-        run: |
-          VER=${{ steps.version.outputs.ver }}
-          echo "## 上传完成" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "OSS 路径:" >> $GITHUB_STEP_SUMMARY
-          echo "- \`singbox-client/${VER}/SingBox-Client-macos-arm64.dmg\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`singbox-client/${VER}/SingBox-Client-windows-x64.zip\`" >> $GITHUB_STEP_SUMMARY
+            ---
+            内置 sing-box v${{ env.SINGBOX_VERSION }}
+          files: |
+            artifacts/SingBox-Client-macos-arm64/*.dmg
+            artifacts/SingBox-Client-windows-x64/*.zip
+          draft: false
+          prerelease: false
