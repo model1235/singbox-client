@@ -134,3 +134,33 @@ jobs:
             artifacts/SingBox-Client-windows-x64/*.zip
           draft: false
           prerelease: false
+
+  upload-oss:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "ver=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "ver=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload to OSS
+        uses: aliyun/ossutil-action@v2
+        with:
+          access-key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          access-key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          endpoint: ${{ secrets.OSS_ENDPOINT }}
+          commands: |
+            cp -r artifacts/SingBox-Client-macos-arm64/ oss://${{ secrets.OSS_BUCKET }}/singbox-client/${{ steps.version.outputs.ver }}/ --force
+            cp -r artifacts/SingBox-Client-windows-x64/ oss://${{ secrets.OSS_BUCKET }}/singbox-client/${{ steps.version.outputs.ver }}/ --force
+            cp -r artifacts/SingBox-Client-macos-arm64/ oss://${{ secrets.OSS_BUCKET }}/singbox-client/latest/ --force
+            cp -r artifacts/SingBox-Client-windows-x64/ oss://${{ secrets.OSS_BUCKET }}/singbox-client/latest/ --force
