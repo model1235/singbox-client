@@ -6,9 +6,6 @@ on:
       - 'v*'
   workflow_dispatch:
 
-env:
-  SINGBOX_VERSION: "1.11.4"
-
 jobs:
   build:
     strategy:
@@ -16,10 +13,8 @@ jobs:
         include:
           - os: macos-14
             platform: macos-arm64
-            singbox_url: https://github.com/SagerNet/sing-box/releases/download/v1.11.4/sing-box-1.11.4-darwin-arm64.tar.gz
           - os: windows-latest
             platform: windows-x64
-            singbox_url: https://github.com/SagerNet/sing-box/releases/download/v1.11.4/sing-box-1.11.4-windows-amd64.zip
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -32,24 +27,6 @@ jobs:
 
       - name: Install dependencies
         run: pip install PySide6 requests pyinstaller
-
-      - name: Download sing-box (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          mkdir -p resources
-          curl -L "${{ matrix.singbox_url }}" -o singbox.tar.gz
-          tar xzf singbox.tar.gz
-          cp sing-box-*/sing-box resources/sing-box
-          chmod +x resources/sing-box
-
-      - name: Download sing-box (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path resources
-          Invoke-WebRequest -Uri "${{ matrix.singbox_url }}" -OutFile singbox.zip
-          Expand-Archive -Path singbox.zip -DestinationPath singbox-extract
-          Copy-Item "singbox-extract\sing-box-*\sing-box.exe" "resources\sing-box.exe"
 
       - name: Build with PyInstaller
         run: pyinstaller singbox-client.spec --noconfirm
@@ -118,17 +95,17 @@ jobs:
             - **macOS (Apple Silicon)**: `SingBox-Client-macos-arm64.dmg`
             - **Windows (x64)**: `SingBox-Client-windows-x64.zip`
 
+            ### 使用前准备
+            需要自行下载 [sing-box](https://github.com/SagerNet/sing-box/releases) 核心，在客户端设置中指定路径。
+
             ### macOS 安装说明
             1. 打开 DMG，将 SingBox Client 拖到 Applications
             2. 首次打开前执行：`xattr -cr /Applications/SingBox\ Client.app`
-            3. 双击打开
+            3. 双击打开，在设置中指定 sing-box 路径
 
             ### Windows 安装说明
             1. 解压 zip
-            2. 运行 `SingBox Client.exe`
-
-            ---
-            内置 sing-box v${{ env.SINGBOX_VERSION }}
+            2. 运行 `SingBox Client.exe`，在设置中指定 sing-box 路径
           files: |
             artifacts/SingBox-Client-macos-arm64/*.dmg
             artifacts/SingBox-Client-windows-x64/*.zip

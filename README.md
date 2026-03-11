@@ -31,6 +31,12 @@
 - **macOS (Apple Silicon)**: `SingBox-Client-macos-arm64.dmg`
 - **Windows (x64)**: `SingBox-Client-windows-x64.zip`
 
+### 准备 sing-box 核心
+
+客户端不内置 sing-box，需要自行下载：https://github.com/SagerNet/sing-box/releases
+
+安装后在客户端「设置」中指定 sing-box 路径。
+
 ### macOS 安装
 
 1. 打开 DMG，将 SingBox Client 拖到 Applications
@@ -38,12 +44,12 @@
    ```bash
    xattr -cr /Applications/SingBox\ Client.app
    ```
-3. 双击打开
+3. 双击打开，在设置中指定 sing-box 路径
 
 ### Windows 安装
 
 1. 解压 zip
-2. 运行 `SingBox Client.exe`
+2. 运行 `SingBox Client.exe`，在设置中指定 sing-box 路径
 
 ## 从源码运行
 
@@ -63,9 +69,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-需要将 sing-box 二进制放到 `resources/` 目录，或在设置中指定路径。
-
-sing-box 下载：https://github.com/SagerNet/sing-box/releases
+需要在设置中指定 sing-box 二进制路径，或将其加入系统 PATH。
 
 ## 构建
 
