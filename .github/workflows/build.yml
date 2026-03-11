@@ -11,17 +11,7 @@ env:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - os: macos-14
-            platform: macos-arm64
-            singbox_url: https://github.com/SagerNet/sing-box/releases/download/v1.12.12/sing-box-1.12.12-darwin-arm64.tar.gz
-          - os: windows-latest
-            platform: windows-x64
-            singbox_url: https://github.com/SagerNet/sing-box/releases/download/v1.12.12/sing-box-1.12.12-windows-amd64.zip
-
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -33,67 +23,27 @@ jobs:
       - name: Install dependencies
         run: pip install PySide6 requests pyinstaller
 
-      - name: Download sing-box (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          mkdir -p resources
-          curl -L "${{ matrix.singbox_url }}" -o singbox.tar.gz
-          tar xzf singbox.tar.gz
-          cp sing-box-*/sing-box resources/sing-box
-          chmod +x resources/sing-box
-
-      - name: Download sing-box (Windows)
-        if: runner.os == 'Windows'
+      - name: Download sing-box
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path resources
-          Invoke-WebRequest -Uri "${{ matrix.singbox_url }}" -OutFile singbox.zip
+          Invoke-WebRequest -Uri "https://github.com/SagerNet/sing-box/releases/download/v${{ env.SINGBOX_VERSION }}/sing-box-${{ env.SINGBOX_VERSION }}-windows-amd64.zip" -OutFile singbox.zip
           Expand-Archive -Path singbox.zip -DestinationPath singbox-extract
           Copy-Item "singbox-extract\sing-box-*\sing-box.exe" "resources\sing-box.exe"
 
       - name: Build with PyInstaller
         run: pyinstaller singbox-client.spec --noconfirm
 
-      - name: Create DMG (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install create-dmg
-          create-dmg \
-            --volname "SingBox Client" \
-            --volicon "resources/icon.icns" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --icon "SingBox Client.app" 150 190 \
-            --app-drop-link 450 190 \
-            --no-internet-enable \
-            "SingBox-Client-${{ matrix.platform }}.dmg" \
-            "dist/SingBox Client.app" \
-          || \
-          create-dmg \
-            --volname "SingBox Client" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --icon "SingBox Client.app" 150 190 \
-            --app-drop-link 450 190 \
-            --no-internet-enable \
-            "SingBox-Client-${{ matrix.platform }}.dmg" \
-            "dist/SingBox Client.app"
-
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
+      - name: Package
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist\SingBox Client.exe" -DestinationPath "SingBox-Client-${{ matrix.platform }}.zip"
+          Compress-Archive -Path "dist\SingBox Client.exe" -DestinationPath "SingBox-Client-windows-x64.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SingBox-Client-${{ matrix.platform }}
-          path: |
-            SingBox-Client-${{ matrix.platform }}.dmg
-            SingBox-Client-${{ matrix.platform }}.zip
+          name: SingBox-Client-windows-x64
+          path: SingBox-Client-windows-x64.zip
 
   release:
     needs: build
@@ -102,7 +52,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -115,23 +65,16 @@ jobs:
             ## SingBox Client ${{ github.ref_name }}
 
             ### 下载
-            - **macOS (Apple Silicon)**: `SingBox-Client-macos-arm64.dmg`
             - **Windows (x64)**: `SingBox-Client-windows-x64.zip`
+            - **macOS (Apple Silicon)**: 本地构建，见下方说明
 
-            ### macOS 安装说明
-            1. 打开 DMG，将 SingBox Client 拖到 Applications
-            2. 首次打开前执行：`xattr -cr /Applications/SingBox\ Client.app`
-            3. 双击打开
-
-            ### Windows 安装说明
+            ### Windows 安装
             1. 解压 zip
             2. 运行 `SingBox Client.exe`
 
             ---
             内置 sing-box v${{ env.SINGBOX_VERSION }}
-          files: |
-            artifacts/SingBox-Client-macos-arm64/*.dmg
-            artifacts/SingBox-Client-windows-x64/*.zip
+          files: artifacts/SingBox-Client-windows-x64/*.zip
           draft: false
           prerelease: false
 
@@ -139,7 +82,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -160,7 +103,5 @@ jobs:
           access-key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
           endpoint: ${{ secrets.OSS_ENDPOINT }}
           commands: |
-            cp -r artifacts/SingBox-Client-macos-arm64/ oss://${{ secrets.OSS_BUCKET }}/singbox-client/${{ steps.version.outputs.ver }}/ --force
             cp -r artifacts/SingBox-Client-windows-x64/ oss://${{ secrets.OSS_BUCKET }}/singbox-client/${{ steps.version.outputs.ver }}/ --force
-            cp -r artifacts/SingBox-Client-macos-arm64/ oss://${{ secrets.OSS_BUCKET }}/singbox-client/latest/ --force
             cp -r artifacts/SingBox-Client-windows-x64/ oss://${{ secrets.OSS_BUCKET }}/singbox-client/latest/ --force
